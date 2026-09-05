@@ -31,6 +31,6 @@ jobs:
         run: |
           sed -i 's#source: github://eburi/wireless-tank-sensor#source: { type: local, path: ../components }#' \
             examples/*.yaml examples/packages/*.yaml
-      - uses: esphome/build-action@v8
+      - uses: esphome/build-action@v8.1.0
         with:
           yaml-file: examples/${{ matrix.config }}
