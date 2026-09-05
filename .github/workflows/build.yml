@@ -1,0 +1,36 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  esphome:
+    name: ${{ matrix.config }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - water-tank-1.yaml
+          - water-tank-bench.yaml
+          - ota-trigger-beacon.yaml
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dummy secrets
+        run: |
+          cat > examples/secrets.yaml <<'EOT'
+          wifi_ssid: "ci"
+          wifi_password: "ci-password"
+          ota_password: "ci-ota"
+          api_encryption_key: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+          EOT
+      - name: Build the components from this commit, not from GitHub
+        run: |
+          sed -i 's#source: github://eburi/wireless-tank-sensor#source: { type: local, path: ../components }#' \
+            examples/*.yaml examples/packages/*.yaml
+      - uses: esphome/build-action@v8
+        with:
+          yaml-file: examples/${{ matrix.config }}

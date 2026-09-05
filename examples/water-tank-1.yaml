@@ -1,0 +1,11 @@
+# One tank = one file like this. Everything shared lives in packages/; this file
+# only names the unit. Keep bthome_name ≤ 9 characters and ota_target unique —
+# it is the low byte of the OTA trigger's iBeacon minor (0 = every tank).
+substitutions:
+  device_name: water-tank-1
+  friendly_name: "Water Tank 1"
+  bthome_name: Tank1
+  ota_target: "1"
+
+packages:
+  sleep: !include packages/tank-sleep.yaml

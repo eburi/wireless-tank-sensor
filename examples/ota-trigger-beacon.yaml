@@ -1,0 +1,83 @@
+# OTA trigger beacon node — a second XIAO ESP32-C3 (any ESP32 works), USB powered
+# near Home Assistant. Idle by default; when an "OTA trigger" switch is turned on in
+# HA it advertises a standard iBeacon frame for a few minutes so a sleeping tank
+# sensor catches it and opens its Wi-Fi/OTA maintenance window. While on air, HA's
+# iBeacon integration also shows it — free confirmation the trigger is transmitting.
+# UUID/major/minor must match the scanner in packages/tank-sleep.yaml.
+esphome:
+  name: tank-ota-trigger
+  friendly_name: Tank OTA Trigger
+
+esp32:
+  board: seeed_xiao_esp32c3
+  framework:
+    type: esp-idf
+
+logger:
+
+api:
+  encryption:
+    key: !secret api_encryption_key
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+external_components:
+  - source: github://eburi/wireless-tank-sensor
+    components: [ota_beacon]
+    refresh: 1d
+
+esp32_ble:
+
+ota_beacon:
+  id: trigger
+  uuid: c0a1b2c3-d4e5-4f60-8172-8394a5b6c7d8   # project UUID, shown by HA's iBeacon integration
+  safety_timeout: 6min    # hard backstop; the switches below auto-off sooner
+
+# Optional but recommended: the node doubles as a Bluetooth proxy, which also
+# helps HA hear the tank sensors if its own radio is far away.
+# esp32_ble_tracker:
+# bluetooth_proxy:
+
+# One switch per tank plus "all tanks". Each advertises for 4 min (longer than a
+# sensor's ~15 s wake cycle, so it is caught reliably), then auto-offs. Only one
+# target is on air at a time — switching a second one on takes over.
+switch:
+  - platform: template
+    name: "OTA trigger tank 1"
+    id: ota_trigger_1
+    icon: mdi:bluetooth-transfer
+    lambda: 'return id(trigger).is_advertising(1);'
+    turn_on_action:
+      - lambda: 'id(trigger).start(1);'
+      - delay: 4min
+      - switch.turn_off: ota_trigger_1
+    turn_off_action:
+      - lambda: 'if (id(trigger).is_advertising(1)) id(trigger).stop();'
+  - platform: template
+    name: "OTA trigger tank 2"
+    id: ota_trigger_2
+    icon: mdi:bluetooth-transfer
+    lambda: 'return id(trigger).is_advertising(2);'
+    turn_on_action:
+      - lambda: 'id(trigger).start(2);'
+      - delay: 4min
+      - switch.turn_off: ota_trigger_2
+    turn_off_action:
+      - lambda: 'if (id(trigger).is_advertising(2)) id(trigger).stop();'
+  - platform: template
+    name: "OTA trigger all tanks"
+    id: ota_trigger_all
+    icon: mdi:bluetooth-transfer
+    lambda: 'return id(trigger).is_advertising(0);'
+    turn_on_action:
+      - lambda: 'id(trigger).start(0);'
+      - delay: 4min
+      - switch.turn_off: ota_trigger_all
+    turn_off_action:
+      - lambda: 'if (id(trigger).is_advertising(0)) id(trigger).stop();'

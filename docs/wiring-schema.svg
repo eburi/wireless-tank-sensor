@@ -1,0 +1,213 @@
+<svg viewBox="0 0 1240 810" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Kali tank sensor wiring schema (rev 2)</title>
+  <desc id="desc">5 V rail feeds the INA238 breakout VIN and the measurement chain: screw VIN+ through the onboard 15 milliohm shunt to VIN-, then R2 150 ohm, node A, tank sender, node B, BS170 low-side switch to the common ground. Gate driven from GPIO3 via R3 100 ohm with R4 100k pull-down. I2C on GPIO6/GPIO7. Final build adds 12 V bus, fuse, MINI-360 at 5.0 V, diode D1 and 470 uF capacitor C1.</desc>
+  <style>
+    .wire { fill: none; stroke-width: 2.25; stroke-linejoin: round; }
+    .w12  { stroke: #8f2b2b; }
+    .w5   { stroke: #d24444; }
+    .sig  { stroke: #d07b16; }
+    .sda  { stroke: #a08a00; }
+    .ina3 { stroke: #7550cf; }
+    .scl  { stroke: #2f5fd0; }
+    .gnd  { stroke: #1c2128; }
+    .bus  { fill: none; stroke: #1c2128; stroke-width: 3.5; }
+    .internal { fill: none; stroke: #5b6472; stroke-width: 1.5; }
+    .sense { fill: none; stroke: #5b6472; stroke-width: 1.5; stroke-dasharray: 5 4; }
+    .box  { fill: #ffffff; stroke: #b9c0c9; stroke-width: 1.5; }
+    .comp { fill: #ffffff; stroke: #1c2128; stroke-width: 1.75; }
+    .dashedbox { fill: none; stroke: #1c2128; stroke-width: 1.5; stroke-dasharray: 6 4; }
+    .dot  { fill: #1c2128; }
+    .term { fill: #ffffff; stroke: #1c2128; stroke-width: 1.75; }
+    text { fill: #1c2128; }
+    .t-title { font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; font-size: 14px; font-weight: 600; }
+    .t-pin   { font-family: SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size: 11px; }
+    .t-lbl   { font-family: SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size: 12px; }
+    .t-sub   { font-family: SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size: 10.5px; fill: #5b6472; }
+  </style>
+
+  <rect x="0" y="0" width="1240" height="810" fill="#ffffff"/>
+
+  <!-- ============ GND bus ============ -->
+  <line class="bus" x1="330" y1="700" x2="1105" y2="700"/>
+  <g stroke="#1c2128" stroke-width="2.5" fill="none">
+    <line x1="1105" y1="692" x2="1105" y2="708"/>
+    <line x1="1112" y1="695" x2="1112" y2="705"/>
+    <line x1="1119" y1="698" x2="1119" y2="702"/>
+  </g>
+  <text class="t-sub" x="700" y="726" text-anchor="middle">GND — one single common ground (black)</text>
+
+  <!-- ============ bench note ============ -->
+  <text class="t-sub" x="40" y="34">BENCH: power via USB-C —</text>
+  <text class="t-sub" x="40" y="48">this 12 V stage is the final build</text>
+
+  <!-- ============ 12 V input ============ -->
+  <circle class="term" cx="50" cy="90" r="5"/>
+  <circle class="term" cx="50" cy="130" r="5"/>
+  <text class="t-lbl" x="34" y="72" fill="#8f2b2b">+12 V boat bus</text>
+  <text class="t-sub" x="34" y="152">12 V return</text>
+
+  <line class="wire w12" x1="55" y1="90" x2="95" y2="90"/>
+  <!-- F1 fuse -->
+  <rect class="comp" x="95" y="82" width="55" height="16"/>
+  <line x1="95" y1="90" x2="150" y2="90" stroke="#1c2128" stroke-width="1.5"/>
+  <text class="t-lbl" x="122" y="113" text-anchor="middle">F1 0.5–1 A</text>
+  <line class="wire w12" x1="150" y1="90" x2="200" y2="90"/>
+  <line class="wire gnd" x1="55" y1="130" x2="200" y2="130"/>
+
+  <!-- ============ MINI-360 ============ -->
+  <rect class="box" x="200" y="60" width="130" height="90" rx="8"/>
+  <text class="t-title" x="265" y="82" text-anchor="middle">MINI-360</text>
+  <text class="t-sub" x="265" y="116" text-anchor="middle">set 5.0 V FIRST</text>
+  <text class="t-pin" x="206" y="94">IN+</text>
+  <text class="t-pin" x="206" y="134">IN−</text>
+  <text class="t-pin" x="324" y="94" text-anchor="end">OUT+</text>
+  <text class="t-pin" x="324" y="134" text-anchor="end">OUT−</text>
+
+  <!-- OUT- to bus -->
+  <polyline class="wire gnd" points="330,130 345,130 345,700"/>
+  <circle class="dot" cx="345" cy="700" r="4"/>
+
+  <!-- ============ D1 diode ============ -->
+  <line class="wire w5" x1="330" y1="90" x2="365" y2="90"/>
+  <polygon points="365,80 365,100 390,90" fill="#1c2128"/>
+  <line x1="390" y1="79" x2="390" y2="101" stroke="#1c2128" stroke-width="2.5"/>
+  <text class="t-lbl" x="378" y="66" text-anchor="middle">D1 1N5817</text>
+  <text class="t-sub" x="378" y="116" text-anchor="middle">band → XIAO</text>
+  <line class="wire w5" x1="390" y1="90" x2="490" y2="90"/>
+
+  <!-- ============ C1 ============ -->
+  <circle class="dot" cx="430" cy="90" r="4"/>
+  <line class="wire w5" x1="430" y1="90" x2="430" y2="196"/>
+  <line x1="412" y1="196" x2="448" y2="196" stroke="#1c2128" stroke-width="2.5"/>
+  <path d="M 412 210 Q 430 202 448 210" fill="none" stroke="#1c2128" stroke-width="2.5"/>
+  <text class="t-lbl" x="456" y="194">+</text>
+  <line class="wire gnd" x1="430" y1="208" x2="430" y2="700"/>
+  <circle class="dot" cx="430" cy="700" r="4"/>
+  <text class="t-lbl" x="430" y="236" text-anchor="middle">C1 470 µF</text>
+  <text class="t-sub" x="430" y="252" text-anchor="middle">10 V — 5 V side only!</text>
+
+  <!-- ============ 5 V rail up & over ============ -->
+  <circle class="dot" cx="462" cy="90" r="4"/>
+  <polyline class="wire w5" points="462,90 462,28 1030,28 1030,100"/>
+  <text class="t-lbl" x="600" y="20" fill="#d24444">5 V rail (red)</text>
+  <!-- INA logic power from D10 (3.3 V) -->
+  <polyline class="wire ina3" points="650,130 700,130 700,44 830,44 830,60"/>
+  <text class="t-lbl" x="712" y="40" fill="#7550cf">3.3 V from D10</text>
+
+  <!-- ============ XIAO ============ -->
+  <rect class="box" x="490" y="60" width="160" height="260" rx="8"/>
+  <text class="t-title" x="570" y="200" text-anchor="middle">XIAO</text>
+  <text class="t-title" x="570" y="220" text-anchor="middle">ESP32-C3</text>
+  <text class="t-sub" x="570" y="252" text-anchor="middle">3V3 pad unused</text>
+  <text class="t-pin" x="496" y="94">VUSB</text>
+  <text class="t-pin" x="496" y="134">GND</text>
+  <text class="t-pin" x="644" y="134" text-anchor="end">D10 · GPIO10</text>
+  <text class="t-pin" x="644" y="174" text-anchor="end">D1 · GPIO3</text>
+  <text class="t-pin" x="644" y="234" text-anchor="end">D4 · GPIO6</text>
+  <text class="t-pin" x="644" y="274" text-anchor="end">D5 · GPIO7</text>
+
+  <!-- XIAO GND -->
+  <polyline class="wire gnd" points="490,130 482,130 482,700"/>
+  <circle class="dot" cx="482" cy="700" r="4"/>
+
+  <!-- ============ I2C ============ -->
+  <line class="wire sda" x1="650" y1="230" x2="790" y2="230"/>
+  <line class="wire scl" x1="650" y1="270" x2="790" y2="270"/>
+  <text class="t-lbl" x="720" y="222" text-anchor="middle" fill="#a08a00">SDA yellow</text>
+  <text class="t-lbl" x="720" y="290" text-anchor="middle" fill="#2f5fd0">SCL blue</text>
+
+  <!-- ============ INA238 breakout ============ -->
+  <rect class="box" x="790" y="60" width="160" height="270" rx="8"/>
+  <text class="t-pin" x="830" y="76" text-anchor="middle">VIN</text>
+  <text class="t-title" x="870" y="190" text-anchor="middle">INA238</text>
+  <text class="t-sub" x="870" y="208" text-anchor="middle">breakout MRS190A</text>
+  <text class="t-pin" x="796" y="134">GND</text>
+  <text class="t-pin" x="796" y="234">SDA</text>
+  <text class="t-pin" x="796" y="274">SCL</text>
+  <text class="t-pin" x="944" y="96" text-anchor="end">VIN+ ⊕</text>
+  <text class="t-pin" x="944" y="180" text-anchor="end">VIN− ⊕</text>
+  <text class="t-sub" x="868" y="286" text-anchor="middle">pull-ups ride on VIN → 3.3 V!</text>
+  <text class="t-sub" x="868" y="300" text-anchor="middle">VBus jumper ships open →</text>
+  <text class="t-sub" x="868" y="314" text-anchor="middle">wire VBus pad to node A</text>
+  <text class="t-sub" x="868" y="328" text-anchor="middle">A0/A1 open = 0x40 · ALRT n/c</text>
+  <text class="t-pin" x="944" y="244" text-anchor="end">VBUS</text>
+  <line class="sense" x1="950" y1="240" x2="1030" y2="240"/>
+
+  <!-- internal shunt -->
+  <polyline class="internal" points="948,100 912,100 912,112"/>
+  <rect class="comp" x="900" y="112" width="24" height="40"/>
+  <polyline class="internal" points="912,152 912,164 948,164"/>
+  <text class="t-sub" x="890" y="126" text-anchor="end">R015</text>
+  <text class="t-sub" x="890" y="140" text-anchor="end">15 mΩ</text>
+  <text class="t-sub" x="890" y="154" text-anchor="end">on board</text>
+
+  <!-- INA GND to bus -->
+  <polyline class="wire gnd" points="790,130 770,130 770,700"/>
+  <circle class="dot" cx="770" cy="700" r="4"/>
+
+  <!-- ============ measurement chain ============ -->
+  <line class="wire w5" x1="1030" y1="100" x2="950" y2="100"/>
+  <polyline class="wire gnd" points="950,164 1030,164 1030,176"/>
+  <!-- R2 -->
+  <rect class="comp" x="1018" y="176" width="24" height="40"/>
+  <text class="t-lbl" x="1052" y="192">R2 150 Ω</text>
+  <text class="t-sub" x="1052" y="207">value uncritical</text>
+  <line class="wire gnd" x1="1030" y1="216" x2="1030" y2="266"/>
+  <!-- node A -->
+  <circle class="dot" cx="1030" cy="240" r="4"/>
+  <text class="t-lbl" x="1014" y="234" text-anchor="end">A</text>
+
+  <!-- sender -->
+  <rect class="dashedbox" x="988" y="266" width="84" height="68" rx="6"/>
+  <text class="t-pin" x="1030" y="288" text-anchor="middle">TANK SENDER</text>
+  <text class="t-pin" x="1030" y="304" text-anchor="middle">10–180 Ω</text>
+  <text class="t-sub" x="1030" y="320" text-anchor="middle">bench: 200 Ω pot</text>
+  <line class="wire gnd" x1="1030" y1="334" x2="1030" y2="380"/>
+  <circle class="dot" cx="1030" cy="356" r="4"/>
+  <text class="t-lbl" x="1014" y="352" text-anchor="end">B</text>
+
+  <!-- Q1 -->
+  <rect class="box" x="1000" y="380" width="70" height="70" rx="6"/>
+  <text class="t-pin" x="1024" y="396">D</text>
+  <text class="t-title" x="1035" y="414" text-anchor="middle">Q1</text>
+  <text class="t-lbl" x="1035" y="431" text-anchor="middle">BS170</text>
+  <text class="t-pin" x="1024" y="445">S</text>
+  <text class="t-pin" x="1006" y="412">G</text>
+  <line class="wire gnd" x1="1030" y1="450" x2="1030" y2="700"/>
+  <circle class="dot" cx="1030" cy="700" r="4"/>
+
+  <!-- gate drive -->
+  <polyline class="wire sig" points="650,170 680,170 680,360 780,360"/>
+  <text class="t-lbl" x="672" y="352" text-anchor="end" fill="#d07b16">MEAS_EN orange</text>
+  <rect class="comp" x="780" y="348" width="40" height="24"/>
+  <text class="t-lbl" x="800" y="340" text-anchor="middle">R3 100 Ω</text>
+  <polyline class="wire sig" points="820,360 975,360 975,415 1000,415"/>
+  <circle class="dot" cx="975" cy="415" r="4"/>
+  <!-- R4 -->
+  <line class="wire gnd" x1="975" y1="415" x2="975" y2="440"/>
+  <rect class="comp" x="963" y="440" width="24" height="40"/>
+  <text class="t-lbl" x="957" y="458" text-anchor="end">R4 100 k</text>
+  <text class="t-sub" x="957" y="473" text-anchor="end">pull-down</text>
+  <line class="wire gnd" x1="975" y1="480" x2="975" y2="700"/>
+  <circle class="dot" cx="975" cy="700" r="4"/>
+
+  <!-- ============ legend ============ -->
+  <g>
+    <line class="wire w5"  x1="60"  y1="768" x2="84"  y2="768"/>
+    <text class="t-lbl" x="92" y="772">5 V (red)</text>
+    <line class="wire w12" x1="200" y1="768" x2="224" y2="768"/>
+    <text class="t-lbl" x="232" y="772">12 V (final)</text>
+    <line class="wire sig" x1="360" y1="768" x2="384" y2="768"/>
+    <text class="t-lbl" x="392" y="772">MEAS_EN (orange)</text>
+    <line class="wire sda" x1="560" y1="768" x2="584" y2="768"/>
+    <text class="t-lbl" x="592" y="772">SDA (yellow)</text>
+    <line class="wire scl" x1="710" y1="768" x2="734" y2="768"/>
+    <text class="t-lbl" x="742" y="772">SCL (blue)</text>
+    <line class="wire ina3" x1="60" y1="792" x2="84" y2="792"/>
+    <text class="t-lbl" x="92" y="796">INA power 3.3 V from D10 (red wire on breakout VIN)</text>
+    <line class="wire gnd" x1="480" y1="792" x2="504" y2="792"/>
+    <text class="t-lbl" x="512" y="796">GND / sender loop (black)</text>
+    <line class="sense" x1="700" y1="792" x2="724" y2="792"/>
+    <text class="t-lbl" x="732" y="796">VBus sense → node A</text>
+  </g>
+</svg>

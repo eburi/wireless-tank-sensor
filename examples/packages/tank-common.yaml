@@ -1,0 +1,184 @@
+# Shared package for every tank sensor. The device file sets the substitutions;
+# nothing else differs between tanks (calibration is learned on the device, the
+# litre figures are per-device "number" entities stored in NVS).
+#
+#   device_name    ESPHome node name / hostname, e.g. water-tank-1
+#   friendly_name  prefix for every HA entity, e.g. "Water Tank 1"
+#   bthome_name    BLE local name in the BTHome advert, max 9 chars (the frame is full)
+#
+# Wiring: see docs/hardware.md (XIAO ESP32-C3 + INA238 breakout + BS170 low-side switch).
+esphome:
+  name: ${device_name}
+  friendly_name: ${friendly_name}
+
+esp32:
+  board: seeed_xiao_esp32c3
+  framework:
+    type: esp-idf
+
+logger:
+
+api:
+  encryption:
+    key: !secret api_encryption_key   # one shared key for the whole fleet
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+# The custom components come straight from GitHub. Pin `ref:` to a tag if you
+# want reproducible builds; `refresh` controls how often ESPHome re-fetches.
+external_components:
+  - source: github://eburi/wireless-tank-sensor
+    components: [bthome_beacon, tank_level]
+    refresh: 1d
+
+esp32_ble:
+
+# BTHome v2 advertising. HA's Bluetooth integration discovers the device natively;
+# tank level arrives as BTHome "moisture" %, volume as "volume" (0.1 L), the raw
+# sender resistance as "count" in tenths of an ohm, and "almost empty" as a
+# problem-class binary sensor.
+bthome_beacon:
+  id: bthome
+  device_name: "${bthome_name}"
+  level: tank_level_cal
+  count: sender_resistance
+  volume: tank_volume
+  almost_empty: tank_almost_empty
+
+# Self-calibrating tank level. Learns the sender's usable resistance range
+# conservatively (a new extreme needs 5 spaced observations, the least extreme
+# candidate wins, the range never shrinks) and persists it to NVS flash, so it
+# survives deep sleep, power cycles and firmware updates.
+# Low resistance = empty → invert: false (default). Set invert: true for senders
+# that read low when full (many VDO/European ones: ~10 Ω full, ~180 Ω empty).
+tank_level:
+  id: tank_model
+  source: sender_resistance
+  seed_min: 3.0     # broad assumptions until the learned span reaches 25 Ω
+  seed_max: 183.0
+  invert: false
+  # Tank content model: total/reserve litres come from the two "number" entities
+  # below (editable in HA, persisted on the ESP), not from this config.
+  level:
+    name: "Tank level"
+    id: tank_level_cal
+  volume:
+    name: "Tank volume"
+    id: tank_volume
+  almost_empty:
+    name: "Tank almost empty"
+    id: tank_almost_empty
+  learned_min:
+    name: "Learned R min"
+  learned_max:
+    name: "Learned R max"
+
+# MEAS_EN — BS170 gate on D1/GPIO3. On = the measurement chain conducts.
+# INA_POWER — the breakout's VIN is fed from D10/GPIO10 at 3.3 V because its I2C
+# pull-ups ride on VIN. Both pins float in deep sleep: chain and breakout fully off.
+switch:
+  - platform: gpio
+    pin: GPIO3
+    id: meas_en
+    name: "Measurement path"
+    restore_mode: ALWAYS_OFF
+  - platform: gpio
+    pin: GPIO10
+    id: ina_power
+    name: "INA238 power"
+    restore_mode: ALWAYS_ON
+
+i2c:
+  sda: GPIO6   # D4
+  scl: GPIO7   # D5
+  frequency: 100kHz
+
+sensor:
+  - platform: ina2xx_i2c
+    model: INA238
+    address: 0x40
+    shunt_resistance: 0.015 ohm   # R015 on the breakout, between the screw terminals
+    max_current: 100 mA
+    adc_range: 1                  # ±40.96 mV — chain current gives < 0.5 mV shunt signal
+    # All channels must finish converting inside update_interval: 4120 µs × 128 avg
+    # × 3 channels ≈ 1.6 s never completed at 1 s, so the driver restarted the
+    # conversion forever and no value was ever published. 1052 µs × 128 works.
+    adc_time: 1052 us
+    adc_averaging: 128
+    update_interval: 1s
+    current:
+      name: "Chain current"
+      id: chain_current
+      accuracy_decimals: 4
+    bus_voltage:
+      name: "Sender voltage"
+      id: bus_voltage
+      accuracy_decimals: 3        # VBus pad wired to node A: sender + Q1 voltage;
+                                  # ≈ 5 V when MEAS_EN is off
+    shunt_voltage:
+      name: "Shunt voltage"
+      accuracy_decimals: 5
+
+  # VBus sits at node A, so R = V/I = sender + Q1 R_ds(on) directly — R2 drops out.
+  # The ~3 Ω R_ds(on) surplus is expected and absorbed by the calibration.
+  - platform: template
+    name: "Sender resistance"
+    id: sender_resistance
+    unit_of_measurement: "Ω"
+    accuracy_decimals: 1
+    state_class: measurement
+    update_interval: 1s
+    lambda: |-
+      if (!id(meas_en).state) return NAN;
+      float i = id(chain_current).state;
+      float v = id(bus_voltage).state;
+      if (isnan(i) || isnan(v)) return NAN;
+      if (i < 0.002f) return NAN;  // open circuit / path off
+      return v / i;
+
+# Tank content model inputs — set these from HA after the pump test:
+# total = tank capacity; reserve = litres the pump still delivered after the measured
+# level read 0 % (float on its bottom stop). Stored in the ESP's NVS (restore_value),
+# so they survive deep sleep, power cycles and firmware updates; re-applied to the
+# model at every boot via on_value. On the sleeping firmware they are editable only
+# while the maintenance window is open (that is when HA can reach the device).
+# While both are 0 the level is plain float travel and no volume is reported.
+number:
+  - platform: template
+    name: "Tank total volume"
+    id: tank_total_volume
+    icon: mdi:water
+    unit_of_measurement: "L"
+    device_class: volume_storage
+    entity_category: config
+    mode: box
+    min_value: 0
+    max_value: 1000
+    step: 1
+    initial_value: 0
+    restore_value: true
+    optimistic: true
+    set_action:
+      - lambda: 'global_preferences->sync();'  # flush now; the sleep firmware may not wait 60 s
+    on_value:
+      - lambda: 'id(tank_model).set_total_volume(x);'
+  - platform: template
+    name: "Tank reserve volume"
+    id: tank_reserve_volume
+    icon: mdi:water-minus
+    unit_of_measurement: "L"
+    device_class: volume_storage
+    entity_category: config
+    mode: box
+    min_value: 0
+    max_value: 1000
+    step: 1
+    initial_value: 0
+    restore_value: true
+    optimistic: true
+    set_action:
+      - lambda: 'global_preferences->sync();'
+    on_value:
+      - lambda: 'id(tank_model).set_reserve_volume(x);'

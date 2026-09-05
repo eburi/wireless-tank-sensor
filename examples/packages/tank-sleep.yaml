@@ -1,0 +1,96 @@
+# Duty-cycled firmware. BLE is the always-available channel; Wi-Fi is a
+# maintenance mechanism only.
+#
+# Cold boot (power-cycle): stays awake for 5 minutes with Wi-Fi + continuous
+# measurement — the OTA/commissioning window. To get back to the bench firmware:
+# power-cycle, then OTA-flash water-tank-bench.yaml within that window.
+#
+# Timer wake (normal cycle): Wi-Fi stays off. Measure ~2.5 s, let the fresh value go
+# out in a few BTHome advertisements, then deep sleep 10 s.
+#
+#   ota_target   1–255, unique per tank: the low byte of the OTA trigger's iBeacon
+#                minor. The trigger node addresses one tank or all of them (0).
+packages:
+  base: !include tank-common.yaml
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  enable_on_boot: false
+
+deep_sleep:
+  id: ds
+  sleep_duration: 10s
+
+globals:
+  - id: ota_trigger_seen
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+
+# While awake, listen for the OTA trigger — a standard iBeacon frame with
+# major 0x4B4F ("KO") and minor 0x54<target> ("T" + tank number, 0 = all tanks),
+# transmitted for a few minutes by the trigger node (ota-trigger-beacon.yaml)
+# from one HA switch per tank. Matching on major/minor is byte-order unambiguous;
+# the UUID is only for HA's iBeacon integration to display. A match opens the same
+# 5-minute maintenance window as a cold boot: Wi-Fi + OTA + live measurement.
+esp32_ble_tracker:
+  scan_parameters:
+    interval: 320ms
+    window: 300ms
+    active: false
+  on_ble_advertise:
+    then:
+      - lambda: |-
+          auto ib = x.get_ibeacon();
+          if (!ib.has_value()) return;
+          ESP_LOGD("ota", "iBeacon %04X/%04X rssi %d", ib->get_major(), ib->get_minor(), x.get_rssi());
+          // minor = 0x54<target>: this tank's own target, or 0 = every tank.
+          const uint16_t minor = ib->get_minor();
+          if (ib->get_major() == 0x4B4F && (minor == 0x5400 || minor == (0x5400 | ${ota_target}))) {
+            ESP_LOGI("ota", "OTA trigger matched");
+            id(ota_trigger_seen) = true;
+          }
+
+esphome:
+  on_boot:
+    priority: -100
+    then:
+      - script.execute: boot_flow
+
+script:
+  - id: maintenance_window
+    mode: single
+    then:
+      - wifi.enable:
+      - switch.turn_on: meas_en
+      - delay: 5min
+      - switch.turn_off: meas_en
+      - wifi.disable:
+  - id: boot_flow
+    mode: single
+    then:
+      - if:
+          condition:
+            lambda: 'return esp_sleep_get_wakeup_cause() != ESP_SLEEP_WAKEUP_TIMER;'
+          then:
+            - logger.log: "Cold boot: Wi-Fi maintenance window (5 min), then duty cycle"
+            - script.execute: maintenance_window
+            - script.wait: maintenance_window
+      - script.execute: measure_cycle
+  - id: measure_cycle
+    mode: single
+    then:
+      - switch.turn_on: meas_en
+      - delay: 2500ms   # sampling window (INA publishes at 1 s with 0.4 s conversions)
+      - switch.turn_off: meas_en
+      - delay: 2000ms   # a few more BTHome advertisements carrying the fresh value
+      - if:
+          condition:
+            lambda: 'return id(ota_trigger_seen);'
+          then:
+            - logger.log: "BLE OTA trigger received — opening maintenance window"
+            - lambda: 'id(ota_trigger_seen) = false;'
+            - script.execute: maintenance_window
+            - script.wait: maintenance_window
+      - deep_sleep.enter: ds

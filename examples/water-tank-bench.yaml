@@ -1,0 +1,20 @@
+# Bench / commissioning variant: Wi-Fi + HA API always on, no deep sleep. Handy for
+# the first hookup, watching the raw readings, and letting the calibration learn
+# while you fill and drain the tank. Same hardware, same components.
+substitutions:
+  device_name: water-tank-bench
+  friendly_name: "Water Tank (bench)"
+  bthome_name: TankBench
+
+packages:
+  base: !include packages/tank-common.yaml
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+# Keep the measurement chain powered all the time on the bench.
+esphome:
+  on_boot:
+    then:
+      - switch.turn_on: meas_en
