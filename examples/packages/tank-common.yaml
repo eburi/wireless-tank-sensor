@@ -33,6 +33,11 @@ external_components:
     components: [bthome_beacon, tank_level]
     refresh: 1d
 
+# Fallback access point + captive portal (the ap: block sits next to the Wi-Fi
+# credentials in the variant files). Only ever active while Wi-Fi is enabled and
+# cannot connect, i.e. in a maintenance window on the sleeping firmware.
+captive_portal:
+
 esp32_ble:
 
 # BTHome v2 advertising. HA's Bluetooth integration discovers the device natively;

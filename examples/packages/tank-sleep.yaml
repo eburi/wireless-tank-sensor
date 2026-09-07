@@ -17,6 +17,12 @@ wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
   enable_on_boot: false
+  # Fallback: if the boat Wi-Fi is not there during a maintenance window, open an
+  # access point after ap_timeout (open network, named after the device) with a
+  # captive portal to enter new credentials or upload firmware.
+  ap:
+    ssid: "${device_name}"
+    ap_timeout: 1min
 
 deep_sleep:
   id: ds
@@ -48,8 +54,13 @@ esp32_ble_tracker:
           // minor = 0x54<target>: this tank's own target, or 0 = every tank.
           const uint16_t minor = ib->get_minor();
           if (ib->get_major() == 0x4B4F && (minor == 0x5400 || minor == (0x5400 | ${ota_target}))) {
-            ESP_LOGI("ota", "OTA trigger matched");
-            id(ota_trigger_seen) = true;
+            // Only arm the flag while duty-cycling. Frames heard during an open
+            // window must not queue a second window right after it (bench bug
+            // 2026-09-05: every triggered window was followed by another one).
+            if (!id(maintenance_window).is_running()) {
+              ESP_LOGI("ota", "OTA trigger matched");
+              id(ota_trigger_seen) = true;
+            }
           }
 
 esphome:
@@ -67,6 +78,7 @@ script:
       - delay: 5min
       - switch.turn_off: meas_en
       - wifi.disable:
+      - lambda: 'id(ota_trigger_seen) = false;'  # anything heard during the window is stale
   - id: boot_flow
     mode: single
     then:
