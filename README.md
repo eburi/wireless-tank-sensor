@@ -71,7 +71,7 @@ unexpectedly. Mostly.
 | 😴 **Deep sleep duty cycle** | Wake → power the measurement chain → sample for ~2.5 s → advertise → sleep 10 s. The sender, the INA238 and its LED are completely unpowered in between. |
 | 🧠 **Self-calibrating** | Learns the sender's real min/max resistance from the tank being filled and drained. Conservative: a new extreme needs five spaced observations, the least extreme one wins, the range never shrinks, spikes decay. Persisted to flash. |
 | 🪣 **Tank content model** | Float senders have a dead zone at the bottom. Tell it total litres and how many litres the pump still delivers after the gauge reads 0 %, and it reports true content + a "you are now drinking the reserve" flag. Both numbers are editable in HA and stored on the device. |
-| 🔒 **Wi-Fi off by default** | Turned on only in a 5-minute *maintenance window*: after a power cycle, or on request via a BLE trigger. |
+| 🔒 **Wi-Fi off by default** | Turned on only in a 5-minute *maintenance window*: after a power cycle, or on request via a BLE trigger. If the boat Wi-Fi is gone, the node opens a fallback access point with a captive portal instead. |
 | 🛰️ **BLE-triggered OTA** | A second ESP32 by the HA box advertises an iBeacon on demand (an HA switch). The sleeping sensor hears it on its next wake, opens Wi-Fi, and you flash it from the ESPHome dashboard. Potted in resin? Doesn't matter. |
 | 🧱 **Fleet friendly** | One shared package, one ten-line file per tank, per-tank OTA targets, one API key for all. |
 | 🔌 **Two wires** | 12 V in. Level out, through the air. |
@@ -166,7 +166,7 @@ external_components:
     refresh: 1d
 ```
 
-Add `ref: v1.0.0` (or a commit) if you want builds pinned to a release.
+Pin to a release for reproducible builds: `source: github://eburi/wireless-tank-sensor@v1.0.0`.
 
 ### 2. Name your tank
 
@@ -248,6 +248,11 @@ Two ways in:
   beacon never advertises forever (which would make every sensor open Wi-Fi on every
   wake — that's why ESPHome's built-in `esp32_ble_beacon` couldn't be used: it has no
   runtime off switch).
+
+- **No Wi-Fi at all?** Every example carries a fallback **access point + captive portal**.
+  If a node cannot join the configured Wi-Fi within a minute of switching the radio on, it
+  opens an open AP named after the device (`water-tank-1`, …). Join it, and the captive
+  portal lets you enter new credentials or upload a firmware file — still no screwdriver.
 
 > **Why not transmit from the HA host's own Bluetooth?** Tried it. On Home Assistant OS
 > the Bluetooth integration owns the adapters and BlueZ refuses to register an
