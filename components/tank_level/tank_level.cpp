@@ -17,9 +17,6 @@ namespace tank_level {
 
 static const char *const TAG = "tank_level";
 
-// Plausibility window for a resistive sender incl. Q1 R_ds(on).
-static const float PLAUS_MIN_OHM = 1.0f;
-static const float PLAUS_MAX_OHM = 400.0f;
 // A candidate extremum must clear the learned bound by this much...
 static const float MARGIN_OHM = 1.5f;
 // ...and be observed this many times (once per wake cycle / 30 s) to be accepted.
@@ -44,8 +41,13 @@ struct TankCalRtc {
   uint8_t cand_min_gap, cand_max_gap;
   uint8_t boot_n;
   uint8_t fault_n;
+  // Median window over the last valid raw samples. Kept here so a sleeping node
+  // (a few samples per wake) reaches a full window; calibration only ever looks at
+  // a full-window median, never at the first sample of a boot.
+  float ring[5];
+  uint8_t ring_n, ring_i;
 };
-static const uint32_t RTC_MAGIC = 0x7AACCA1B;
+static const uint32_t RTC_MAGIC = 0x7AACCA1C;  // bump when the layout changes
 static RTC_DATA_ATTR TankCalRtc s_rtc;  // NOLINT
 
 void TankLevel::setup() {
@@ -67,7 +69,7 @@ void TankLevel::setup() {
 }
 
 void TankLevel::on_raw_(float r) {
-  if (std::isnan(r) || r < PLAUS_MIN_OHM || r > PLAUS_MAX_OHM) {
+  if (std::isnan(r) || r < this->plausible_min_ || r > this->plausible_max_) {
     if (s_rtc.fault_n < 255)
       s_rtc.fault_n++;
     if (s_rtc.fault_n == 3)
@@ -80,15 +82,15 @@ void TankLevel::on_raw_(float r) {
   }
   s_rtc.fault_n = 0;
 
-  this->ring_[this->ring_i_] = r;
-  this->ring_i_ = (this->ring_i_ + 1) % 5;
-  if (this->ring_n_ < 5)
-    this->ring_n_++;
+  s_rtc.ring[s_rtc.ring_i] = r;
+  s_rtc.ring_i = (s_rtc.ring_i + 1) % 5;
+  if (s_rtc.ring_n < 5)
+    s_rtc.ring_n++;
   // Tiny insertion sort instead of std::sort: GCC's inlined sort trips
   // -Warray-bounds on small runtime-sized ranges.
   float tmp[5];
-  const uint8_t n = std::min<uint8_t>(this->ring_n_, 5);
-  memcpy(tmp, this->ring_, sizeof(float) * n);
+  const uint8_t n = std::min<uint8_t>(s_rtc.ring_n, 5);
+  memcpy(tmp, s_rtc.ring, sizeof(float) * n);
   for (uint8_t a = 1; a < n; a++) {
     const float v = tmp[a];
     int8_t b = a - 1;
@@ -100,7 +102,10 @@ void TankLevel::on_raw_(float r) {
   }
   const float r_med = tmp[n / 2];
 
-  this->update_calibration_(r_med);
+  // Learn only from a full median window: a lone sample (switch-on artefact,
+  // spike) can move the level a little but never the calibration.
+  if (n >= 5)
+    this->update_calibration_(r_med);
 
   float emin, emax;
   this->effective_range_(&emin, &emax);
@@ -127,6 +132,25 @@ void TankLevel::set_reserve_volume(float liters) {
   this->reserve_volume_ = std::fmax(0.0f, liters);
   ESP_LOGI(TAG, "Reserve volume set to %.0f L", this->reserve_volume_);
   this->republish_();
+}
+
+void TankLevel::reset_calibration() {
+  this->cal_.learned_min = NAN;
+  this->cal_.learned_max = NAN;
+  this->cal_.last_good_level = NAN;
+  this->cal_.flags = 0;
+  this->pref_.save(&this->cal_);
+  global_preferences->sync();
+  memset(&s_rtc, 0, sizeof(s_rtc));
+  s_rtc.magic = RTC_MAGIC;
+  s_rtc.level_ema = NAN;
+  this->last_min_count_ms_ = 0;
+  this->last_max_count_ms_ = 0;
+  if (this->min_sensor_ != nullptr)
+    this->min_sensor_->publish_state(NAN);
+  if (this->max_sensor_ != nullptr)
+    this->max_sensor_->publish_state(NAN);
+  ESP_LOGW(TAG, "Calibration reset — learning the sender range from scratch");
 }
 
 void TankLevel::republish_() {
@@ -264,6 +288,7 @@ void TankLevel::publish_learned_() {
 void TankLevel::dump_config() {
   ESP_LOGCONFIG(TAG, "Tank level calibration:");
   ESP_LOGCONFIG(TAG, "  Seed range: [%.1f, %.1f] Ω", this->seed_min_, this->seed_max_);
+  ESP_LOGCONFIG(TAG, "  Plausible: [%.1f, %.1f] Ω", this->plausible_min_, this->plausible_max_);
   if (this->cal_.flags != 0) {
     ESP_LOGCONFIG(TAG, "  Learned range: [%.1f, %.1f] Ω", this->cal_.learned_min, this->cal_.learned_max);
   } else {

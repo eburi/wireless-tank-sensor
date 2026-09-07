@@ -40,6 +40,12 @@ class TankLevel : public Component {
     this->seed_max_ = mx;
   }
   void set_invert(bool inv) { this->invert_ = inv; }
+  void set_plausible_range(float mn, float mx) {
+    this->plausible_min_ = mn;
+    this->plausible_max_ = mx;
+  }
+  // Forget the learned range, the RTC state and the persisted level; start over.
+  void reset_calibration();
 
   void setup() override;
   void dump_config() override;
@@ -65,14 +71,14 @@ class TankLevel : public Component {
   bool invert_{false};
   float total_volume_{0.0f};
   float reserve_volume_{0.0f};
+  float plausible_min_{1.0f};
+  float plausible_max_{400.0f};
 
   TankCalPersisted cal_{};
   ESPPreferenceObject pref_;
 
-  // Per-boot median ring over the raw samples of this wake/session.
-  float ring_[5];
-  uint8_t ring_n_{0};
-  uint8_t ring_i_{0};
+  // The 5-sample median ring lives in RTC memory (see tank_level.cpp) so it
+  // fills up across wake cycles on a sleeping node.
   // Rate gates: one calibration observation per boot (sleep firmware) or per
   // 30 s (bench firmware). 0 = none yet this boot.
   uint32_t last_min_count_ms_{0};

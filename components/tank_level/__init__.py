@@ -13,6 +13,10 @@ the tank capacity. With both set, the published level is rescaled to true
 content (bottoms out at the reserve fraction instead of lying with 0 %), a
 `volume` sensor reports liters, and `almost_empty` (problem class) trips when
 the float sits on its bottom stop and the reserve is being drained blind.
+
+Calibration observations are taken only from a full 5-sample median window (the
+window lives in RTC memory, so it spans wake cycles on a sleeping node) and a
+`reset_calibration()` method wipes the learned range — wire it to a button.
 """
 
 import esphome.codegen as cg
@@ -39,6 +43,8 @@ CONF_SEED_MAX = "seed_max"
 CONF_INVERT = "invert"
 CONF_TOTAL_VOLUME = "total_volume"
 CONF_RESERVE_VOLUME = "reserve_volume"
+CONF_PLAUSIBLE_MIN = "plausible_min"
+CONF_PLAUSIBLE_MAX = "plausible_max"
 
 tank_level_ns = cg.esphome_ns.namespace("tank_level")
 TankLevel = tank_level_ns.class_("TankLevel", cg.Component)
@@ -71,6 +77,10 @@ CONFIG_SCHEMA = cv.Schema(
         cv.Optional(CONF_INVERT, default=False): cv.boolean,
         cv.Optional(CONF_TOTAL_VOLUME, default=0.0): cv.float_range(min=0.0),
         cv.Optional(CONF_RESERVE_VOLUME, default=0.0): cv.float_range(min=0.0),
+        # Readings outside this window are faults (open/short/switching artefacts)
+        # and never touch the level or the calibration.
+        cv.Optional(CONF_PLAUSIBLE_MIN, default=1.0): cv.float_range(min=0.0),
+        cv.Optional(CONF_PLAUSIBLE_MAX, default=400.0): cv.float_range(min=1.0),
     }
 ).extend(cv.COMPONENT_SCHEMA)
 
@@ -97,3 +107,4 @@ async def to_code(config):
     cg.add(var.set_seed_range(config[CONF_SEED_MIN], config[CONF_SEED_MAX]))
     cg.add(var.set_invert(config[CONF_INVERT]))
     cg.add(var.set_volumes(config[CONF_TOTAL_VOLUME], config[CONF_RESERVE_VOLUME]))
+    cg.add(var.set_plausible_range(config[CONF_PLAUSIBLE_MIN], config[CONF_PLAUSIBLE_MAX]))

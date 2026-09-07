@@ -287,10 +287,11 @@ bthome_beacon:
 
 ### `tank_level`
 
-Resistance in, level out. Median-of-5 input filter, conservative learned min/max with
-NVS persistence, EMA smoothing across deep-sleep cycles (state kept in RTC memory),
-implausible readings (< 1 Ω, > 400 Ω, NaN) hold the last good level instead of
-publishing garbage. Optional volume model.
+Resistance in, level out. Median-of-5 input window (kept in RTC memory so it spans
+wake cycles), conservative learned min/max with NVS persistence that only ever learns
+from a full-window median, EMA smoothing across deep-sleep cycles, and implausible
+readings (outside `plausible_min`/`plausible_max`, NaN) hold the last good level
+instead of publishing garbage. Optional volume model.
 
 ```yaml
 tank_level:
@@ -299,6 +300,7 @@ tank_level:
   seed_min: 3.0                 # assumed range until enough is learned
   seed_max: 183.0
   invert: false                 # true if low resistance = full
+  plausible_max: 250            # Ω; readings above are faults (default 400)
   level: { name: "Tank level" }
   volume: { name: "Tank volume" }
   almost_empty: { name: "Tank almost empty" }
@@ -307,8 +309,10 @@ tank_level:
 ```
 
 Runtime setters `set_total_volume(l)` / `set_reserve_volume(l)` are what the two HA
-`number` entities in the example call. Wipe learned calibration by flashing with
-*erase flash*, or by bumping the preference key in `tank_level.cpp`.
+`number` entities in the example call, and `reset_calibration()` is behind the
+**Reset calibration** button: the learned range never shrinks on its own, so press it
+after swapping the sender or whenever a bad range got in, then move the float through
+its full travel a few times.
 
 ### `ota_beacon`
 
@@ -348,6 +352,13 @@ ota_beacon:
 - **Float senders have a dead zone.** The float bottoms out with litres still in the
   tank. Measure it once with the pump, tell the firmware, and stop lying to yourself
   about "0 %".
+- **The first sample after switching the sender on is a lie.** The INA238 converts bus
+  voltage and shunt current one after the other. Switch the measurement path on between
+  the two and you get the resting rail voltage divided by the real current: sender plus
+  about 130 Ω. On a sleeping node that happens at the same instant every wake, and the
+  calibration happily learned 300 Ω as "full" from five of those. Hence the two-second
+  settle gate in the example config, the full-window rule in `tank_level`, and the
+  `plausible_max` option.
 - **A 31-byte advertisement fills up fast.** Four BTHome objects plus a name leave nine
   characters for the name. Keep it short.
 

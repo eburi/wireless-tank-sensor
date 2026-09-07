@@ -63,6 +63,7 @@ tank_level:
   source: sender_resistance
   seed_min: 3.0     # broad assumptions until the learned span reaches 25 Ω
   seed_max: 183.0
+  plausible_max: 250   # Ω; a 10–180 Ω sender never reads more — anything above is a fault
   invert: false
   # Tank content model: total/reserve litres come from the two "number" entities
   # below (editable in HA, persisted on the ESP), not from this config.
@@ -83,12 +84,25 @@ tank_level:
 # MEAS_EN — BS170 gate on D1/GPIO3. On = the measurement chain conducts.
 # INA_POWER — the breakout's VIN is fed from D10/GPIO10 at 3.3 V because its I2C
 # pull-ups ride on VIN. Both pins float in deep sleep: chain and breakout fully off.
+# Switch-on settle gate. The INA238 converts bus voltage and shunt current one after
+# the other; a sample whose bus voltage was converted just before the measurement
+# path switched on (node A resting at the rail) but whose current was converted just
+# after reads as sender + ~130 Ω. With a 1 s update and ~0.4 s conversions, anything
+# published less than 2 s after switch-on may be such a straddle — drop it.
+globals:
+  - id: meas_on_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+
 switch:
   - platform: gpio
     pin: GPIO3
     id: meas_en
     name: "Measurement path"
     restore_mode: ALWAYS_OFF
+    on_turn_on:
+      - lambda: 'id(meas_on_ms) = millis();'
   - platform: gpio
     pin: GPIO10
     id: ina_power
@@ -137,11 +151,23 @@ sensor:
     update_interval: 1s
     lambda: |-
       if (!id(meas_en).state) return NAN;
+      if (millis() - id(meas_on_ms) < 2000) return NAN;  // settle gate, see globals
       float i = id(chain_current).state;
       float v = id(bus_voltage).state;
       if (isnan(i) || isnan(v)) return NAN;
       if (i < 0.002f) return NAN;  // open circuit / path off
       return v / i;
+
+# Forget the learned resistance range (it never shrinks on its own). Press after
+# swapping the sender, or after a bad range got learned; then move the float through
+# its full travel a few times.
+button:
+  - platform: template
+    name: "Reset calibration"
+    icon: mdi:restart-alert
+    entity_category: config
+    on_press:
+      - lambda: 'id(tank_model).reset_calibration();'
 
 # Tank content model inputs — set these from HA after the pump test:
 # total = tank capacity; reserve = litres the pump still delivered after the measured

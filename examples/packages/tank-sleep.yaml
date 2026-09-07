@@ -94,7 +94,7 @@ script:
     mode: single
     then:
       - switch.turn_on: meas_en
-      - delay: 2500ms   # sampling window (INA publishes at 1 s with 0.4 s conversions)
+      - delay: 4500ms   # sampling window: 2 s settle gate, then ~3 valid 1 s samples
       - switch.turn_off: meas_en
       - delay: 2000ms   # a few more BTHome advertisements carrying the fresh value
       - if:
