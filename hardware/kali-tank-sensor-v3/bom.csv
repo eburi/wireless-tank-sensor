@@ -1,0 +1,20 @@
+Reference,Qty,Value,Footprint,Manufacturer PN,Source,Notes
+U1,1,Seeed XIAO ESP32-C3,kali:XIAO-ESP32C3_TopSolder,113991054,Seeed,HAND-SOLDER after delivery. Flash BEFORE soldering down.
+U2,1,INA238AIDGSR,Package_SO:MSOP-10_3x3mm_P0.5mm,INA238AIDGSR,LCSC C2868250 / DigiKey,PCBWay places. Consign to avoid markup.
+U3,1,3.3V buck 5-30V 3A,kali:DCDC_Module_18x12_4pad,mikroshop 2835,mikroshop.ch,HAND-SOLDER. VERIFY CORNER PINOUT FIRST.
+R1,1,1R 0.1% 25ppm,Resistor_SMD:R_0805_2012Metric,,,Current-sense shunt. Precision matters here.
+R2,1,100R 1%,Resistor_SMD:R_0805_2012Metric,,,Chain current limit
+R3,1,100R,Resistor_SMD:R_0805_2012Metric,,,Q1 gate series
+R4,1,100k,Resistor_SMD:R_0805_2012Metric,,,Q1 gate pull-down (holds path off in sleep)
+R5,1,4k7,Resistor_SMD:R_0805_2012Metric,,,SDA pull-up to VS_INA (switched)
+R6,1,4k7,Resistor_SMD:R_0805_2012Metric,,,SCL pull-up to VS_INA (switched)
+C1,1,100nF X7R 16V,Capacitor_SMD:C_0805_2012Metric,,,INA238 VS decoupling
+C2,1,22uF X5R 10V,Capacitor_SMD:C_1206_3216Metric,,,3V3 bulk at the regulator
+C3,1,22uF X5R 10V,Capacitor_SMD:C_1206_3216Metric,,,3V3 bulk at the MCU (BLE TX bursts)
+C4,1,100nF X7R 50V,Capacitor_SMD:C_0805_2012Metric,,,12V input HF decoupling
+D1,1,SS34,Diode_SMD:D_SMA,SS34,,Reverse-polarity block. 40V > TVS clamp.
+D2,1,SMBJ16A,Diode_SMD:D_SMB,SMBJ16A,,"TVS, 26.0V clamp. NOT SMBJ18A - 29.2V is too close to the module's 30V max."
+F1,1,PTC 200mA hold,Resistor_SMD:R_1206_3216Metric,,,Fuses the TVS failure mode (TVS fails short)
+Q1,1,AO3400A,Package_TO_SOT_SMD:SOT-23,AO3400A,,"Logic-level. NOT BS170/2N7002 - marginal at 3.3V gate."
+SB1,1,Solder bridge,kali:SolderBridge_2pad,,,"Normally CLOSED. OPEN before connecting USB."
+J1-J4,4,Wire pad,kali:WirePad_StrainRelief,,,"Solder pads, 2.2mm strain-relief hole below each"
