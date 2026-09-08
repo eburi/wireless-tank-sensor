@@ -82,10 +82,10 @@ unexpectedly. Mostly.
 
 ```mermaid
 flowchart LR
-    BUS[12 V bus] -->|fuse| BUCK[MINI-360 buck<br/>set to 5 V]
+    BUS[12 V bus] -->|PTC fuse, TVS, reverse diode| BUCK[buck module<br/>3.3 V]
     BUCK --> XIAO[XIAO ESP32-C3]
     XIAO <-->|I2C| INA[INA238<br/>current + voltage]
-    FIVE[5 V] --> INA --> R2[150 Ω] --> SENDER[float sender<br/>10–180 Ω] --> FET[BS170<br/>low-side switch] --> GND
+    RAIL[3.3 V] --> INA --> R2[series resistor] --> SENDER[float sender<br/>10–180 Ω] --> FET[logic-level MOSFET<br/>low-side switch] --> GND
     XIAO -->|GPIO3 MEAS_EN| FET
     XIAO -.->|BTHome adverts| HA[Home Assistant<br/>Bluetooth]
     BEACON[OTA trigger node<br/>second ESP32] -.->|iBeacon on demand| XIAO
@@ -108,8 +108,37 @@ on air — free proof the transmitter is transmitting.
 
 ## 🔩 Hardware
 
-Full details, wiring schema, part rationale, bench findings and power budget live in
-[docs/hardware.md](docs/hardware.md). The short version:
+Two ways to build it. Both run the same firmware and the same example configs.
+
+### Rev 3 — the carrier PCB (recommended)
+
+A **55 × 52 mm four-layer carrier** in [hardware/kali-tank-sensor-v3/](hardware/kali-tank-sensor-v3/):
+KiCad 10 project, DRC/ERC clean, gerbers, drill files, pick-and-place and BOM, ready for
+a PCBWay-style order with SMT assembly. The XIAO and the buck module are hand-soldered
+on top afterwards; four wire pads with strain-relief holes take the harness. See
+[FABRICATION.md](hardware/kali-tank-sensor-v3/FABRICATION.md) for the order parameters,
+assembly order and the things to check before first power-up.
+
+| Part | Role | Approx. cost |
+|------|------|-------------:|
+| Seeed **XIAO ESP32-C3** + its **U.FL antenna** | Brain, BLE, deep sleep | €6 |
+| **INA238** (bare MSOP-10, PCBWay places it) + **1 Ω 0.1 %** shunt | Measures chain current and sender voltage | €3 |
+| **AO3400A** logic-level MOSFET | Low-side switch: sender is only powered while measuring | €0.10 |
+| 100 Ω, 100 Ω, 100 kΩ, 2 × 4.7 kΩ | Current limit, gate series, gate pull-down, I2C pull-ups | pennies |
+| 5–30 V → **3.3 V** buck module, 18 × 12 mm (mikroshop #2835 / DSN-MINI-360 class) | 12 V → 3.3 V | €1 |
+| SS34, SMBJ16A, 200 mA PTC, 2 × 22 µF, 2 × 100 nF | Reverse-polarity, TVS, fuse, rail buffering | €1 |
+| A resistive tank sender (any 10–180 Ω / 240–33 Ω / 0–190 Ω float sender) | The thing in the tank | €15–40 |
+
+The whole thing runs on one 3.3 V rail: the buck feeds the XIAO's 3V3 pad through a
+solder bridge (open it before plugging in USB), and the measurement chain runs from the
+same rail through the INA238's own 1 Ω shunt. The I2C pull-ups hang on the switched
+INA238 supply, so nothing back-feeds the chip while it sleeps unpowered.
+
+### Rev 2 — the breadboard build
+
+What ran on the bench and on the boat first: an INA238 *breakout* with its 15 mΩ shunt,
+a BS170, a MINI-360 set to 5 V. Still valid, and the full wiring schema, part rationale,
+bench findings and power budget for it live in [docs/hardware.md](docs/hardware.md).
 
 | Part | Role | Approx. cost |
 |------|------|-------------:|
@@ -119,18 +148,19 @@ Full details, wiring schema, part rationale, bench findings and power budget liv
 | 150 Ω ¼ W, 100 Ω, 100 kΩ | Current limit, gate series, gate pull-down | pennies |
 | **MINI-360** buck converter (set to 5.0 V) | 12 V → 5 V | €1 |
 | 470 µF / 10 V, Schottky (1N5817), fuse | Rail buffering, USB back-feed protection, 12 V protection | €1 |
-| A resistive tank sender (any 10–180 Ω / 240–33 Ω / 0–190 Ω float sender) | The thing in the tank | €15–40 |
 
-![Wiring schema](docs/wiring-schema.svg)
+![Wiring schema (rev 2)](docs/wiring-schema.svg)
+
+### XIAO pins (both revisions)
 
 | XIAO pin | GPIO | Goes to |
 |----------|------|---------|
-| 5V | — | 5 V rail (buck output), also feeds the INA238 screw terminal VIN+ |
+| 3V3 (rev 3) / 5V (rev 2) | — | Supply from the buck; rev 3 via solder bridge SB1 |
 | GND | — | Common ground |
-| D1 | GPIO3 | BS170 gate via 100 Ω (`MEAS_EN`) |
+| D1 | GPIO3 | MOSFET gate via 100 Ω (`MEAS_EN`) |
 | D4 | GPIO6 | INA238 SDA |
 | D5 | GPIO7 | INA238 SCL |
-| D10 | GPIO10 | INA238 breakout **VIN** (3.3 V logic supply — off in deep sleep) |
+| D10 | GPIO10 | INA238 supply (`VS`, switched — the chip and its pull-ups are off in deep sleep) |
 
 The sender must be **two-wire / isolated** (both terminals free) for the low-side
 switch to work. A hull-grounded single-wire sender needs high-side switching instead —
@@ -359,6 +389,16 @@ ota_beacon:
   calibration happily learned 300 Ω as "full" from five of those. Hence the two-second
   settle gate in the example config, the full-window rule in `tank_level`, and the
   `plausible_max` option.
+- **Verify a module's pad map against a photo of its bottom face, not its silkscreen
+  logic.** The first carrier footprint grouped the buck's four corner pads by polarity
+  (IN+ and IN− at opposite ends). The real module groups them by side: the long pitch
+  separates IN from OUT, the short pitch separates + from −. Built as drawn it would have
+  put 12 V backwards across the input and shorted the output to ground. Two photos and a
+  meter, before ordering, are cheaper than five dead boards.
+- **The first board layout is a third empty.** Rev 3.0 came out at 80 × 55 mm because the
+  input chain and the buck formed one long row with the MCU beside it. Stacking the buck
+  over the MCU and moving the analog block next to the wire pads gave 55 × 52 mm with the
+  same circuit and shorter sender traces. Look at the empty regions before you order.
 - **A 31-byte advertisement fills up fast.** Four BTHome objects plus a name leave nine
   characters for the name. Keep it short.
 
@@ -372,6 +412,10 @@ components/
   tank_level/       self-calibrating level + volume model
   ota_beacon/       switchable iBeacon OTA trigger
 examples/           ready-to-copy ESPHome configs (see Installing)
+hardware/
+  kali-tank-sensor-v3/  rev 3 carrier PCB: KiCad 10 project, gen_sch.py / gen_pcb.py
+                        (the board is generated from source), gerbers + drill + CPL + BOM,
+                        FABRICATION.md with order parameters and pre-power-up checks
 docs/
   hardware.md       full hardware plan, wiring, rationale, bench notes, power budget
   wiring-schema.svg

@@ -1,0 +1,70 @@
+** Drc report for kali-tank-sensor-v3.kicad_pcb **
+** Created on 2026-09-08T17:18:00 **
+** Report includes: Errors, Warnings, Exclusions **
+
+** Found 13 DRC violations **
+[silk_overlap]: Silkscreen clearance
+    Rule: board setup constraints silk; warning
+    @(104.2000 mm, 119.6000 mm): Segment of J4 on F.Silkscreen
+    @(106.0000 mm, 119.8000 mm): Reference field of J4
+[silk_overlap]: Silkscreen clearance
+    Rule: board setup constraints silk; warning
+    @(106.0000 mm, 107.8000 mm): Reference field of J3
+    @(104.2000 mm, 107.6000 mm): Segment of J3 on F.Silkscreen
+[silk_overlap]: Silkscreen clearance
+    Rule: board setup constraints silk; warning
+    @(142.0000 mm, 89.0000 mm): Reference field of U3
+    @(140.1000 mm, 89.0000 mm): Segment of U3 on F.Silkscreen
+[silk_overlap]: Silkscreen clearance
+    Rule: board setup constraints silk; warning
+    @(106.0000 mm, 93.8000 mm): Reference field of J2
+    @(104.2000 mm, 93.6000 mm): Segment of J2 on F.Silkscreen
+[silk_overlap]: Silkscreen clearance
+    Rule: board setup constraints silk; warning
+    @(118.3400 mm, 90.8500 mm): Segment of D2 on F.Silkscreen
+    @(122.0000 mm, 90.8000 mm): Reference field of D2
+[silk_overlap]: Silkscreen clearance
+    Rule: board setup constraints silk; warning
+    @(104.2000 mm, 84.6000 mm): Segment of J1 on F.Silkscreen
+    @(106.0000 mm, 84.8000 mm): Reference field of J1
+[silk_over_copper]: Silkscreen clipped by solder mask
+    Local override; warning
+    @(106.0000 mm, 119.8000 mm): Reference field of J4
+    @(106.0000 mm, 122.0000 mm): Pad 1 [NODE_B] of J4 on F.Cu
+[silk_over_copper]: Silkscreen clipped by solder mask
+    Local override; warning
+    @(106.0000 mm, 107.8000 mm): Reference field of J3
+    @(106.0000 mm, 110.0000 mm): Pad 1 [NODE_A] of J3 on F.Cu
+[silk_over_copper]: Silkscreen clipped by solder mask
+    Local override; warning
+    @(106.0000 mm, 93.8000 mm): Reference field of J2
+    @(106.0000 mm, 96.0000 mm): Pad 1 [GND] of J2 on F.Cu
+[silk_over_copper]: Silkscreen clipped by solder mask
+    Local override; warning
+    @(121.0000 mm, 107.6000 mm): Reference field of U2
+    @(121.0000 mm, 108.9000 mm): Pad 8 [NODE_A] of U2 on F.Cu
+[silk_over_copper]: Silkscreen clipped by solder mask
+    Local override; warning
+    @(121.0000 mm, 107.6000 mm): Reference field of U2
+    @(120.5000 mm, 108.9000 mm): Pad 9 [SHUNT_LO] of U2 on F.Cu
+[silk_over_copper]: Silkscreen clipped by solder mask
+    Local override; warning
+    @(121.0000 mm, 107.6000 mm): Reference field of U2
+    @(121.5000 mm, 108.9000 mm): Pad 7 [GND] of U2 on F.Cu
+[silk_over_copper]: Silkscreen clipped by solder mask
+    Local override; warning
+    @(106.0000 mm, 84.8000 mm): Reference field of J1
+    @(106.0000 mm, 87.0000 mm): Pad 1 [V12_IN] of J1 on F.Cu
+
+** Found 0 unconnected pads **
+
+** Found 0 Footprint errors **
+
+** Ignored checks **
+    - Footprint has no courtyard defined
+    - Track endpoint not centered on via
+    - Tuning profile track geometries
+    - Footprint doesn't match symbol's footprint filters
+    - Footprint component type doesn't match footprint pads
+
+** End of Report **

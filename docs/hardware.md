@@ -3,7 +3,8 @@
 Implementation plan for the sensor described in
 [concept.md](concept.md), built from the
 parts on hand. Target: the fresh water tank on my boat (Kali), VDO-style two-wire **isolated** sender,
-European range **~10 Ω (full) … ~180 Ω (empty)**.
+European range **~10 Ω … ~180 Ω**. Polarity on Kali's sender: **low Ω = empty**
+(firmware `invert: false`) — the rev-1/2 header claiming 10 Ω = full was wrong.
 
 > **Rev 2 (2026-09-01):** adapted to the actual INA238 breakout (MRS190A) which has a
 > 15 mΩ shunt and screw terminals on board — the external 2.2 Ω shunt is dropped — and to
@@ -11,6 +12,205 @@ European range **~10 Ω (full) … ~180 Ω (empty)**.
 > runs from the 5 V rail. (That belief was a mistake — corrected 2026-09-05, the pad is
 > free. The 5 V chain is kept anyway: more current through the 15 mΩ shunt means better
 > INA238 resolution.) Includes a mandatory I2C level check before first hookup.
+
+## Rev 3 (2026-09-08) — decisions taken
+
+Design freeze for a manufactured carrier PCB (PCBWay, qty 5). Decided in review:
+
+| Area | Rev 2 | Rev 3 | Why |
+|------|-------|-------|-----|
+| Rail | 5 V (XIAO LDO drops to 3.3) | **3.3 V single rail** | Skips the LDO drop; one rail for everything |
+| Converter | MINI-360, socketed | **mikroshop #2835 module on pads** (5–30 V in, 3.3 V fix, 3 A, 18×12 mm, ~1 mA no-load, CHF 1.12) | 100 on hand, re-orderable, spec'd. A placed low-Iq buck (LM5165, ~10 µA) saves ~8.8 Ah/yr — not worth PCBA setup at qty 5 |
+| INA238 | MRS190A breakout, 15 mΩ onboard shunt | **Bare INA238AIDGSR placed by PCBWay + chosen shunt** | Frees the shunt value; drops the breakout stack height and its 1–2 mA power LED — both matter under resin |
+| Shunt | 15 mΩ (measured ~17.3 mΩ, 15 % off) | **1 Ω, 0.1 %, low tempco** | Shunt signal 0.18–0.45 mV → 12–30 mV; error vs the ±5 µV offset drops from ~2–4 % to ~0.03 % |
+| R2 | 150 Ω (5 V rail) | **100 Ω** | With 3.3 V and a 1 Ω shunt: 12–30 mA, shunt 12–30 mV (inside ±40.96 mV even with the sender shorted, 32.6 mV), node A 0.30–2.11 V |
+| Switch FET | BS170 TO-92, mirrored batch, R_ds ≈ 3 Ω | **Logic-level SOT-23** (AO3400A / SI2302 class) | 3.3 V gate drive is marginal for BS170/2N7002; ~30 mΩ removes the offset that compressed the full-tank end |
+| TVS | "consider SMBJ18A" | **SMBJ16A** | The module's absolute max is 30 V; SMBJ18A clamps at 29.2 V — no margin. SMBJ16A clamps at 26.0 V |
+| XIAO | headers | **Flat-soldered to top-side pads** | Lies flat for potting; USB-C edge kept clear for pre-potting bring-up |
+| USB safety | "never connect both" | **Solder bridge in the 3V3 feed**, silk `OPEN BEFORE USB` | The real risk is USB back-feeding through the module into the 12 V harness, not the LDO fight |
+| I/O | breakout screw terminals | **Solder pads + through-hole strain relief** | Potted; only the 12 V and sender cables leave the resin, long enough to re-terminate several times |
+| Sealing | — | **Fully potted, U.FL antenna routed out of the pour** | Epoxy over 2.4 GHz detunes and attenuates, and BLE OTA is the only way back into a sealed board |
+| Sender polarity | doc said 10 Ω = full | **low Ω = empty** (`invert: false`) | Firmware was right; the header and expected-values table were wrong |
+
+**Firmware, agreed alongside:** raise the baseline wake interval to minutes, with
+**adaptive sampling** — a reading that moves beyond a threshold drops the node to fast
+sampling for a few minutes to capture a whole fill curve, then relaxes. Fill events feed
+a fueling mode that is the only path allowed to *lower* the learned full end, so ageing
+or corroding wiring can be tracked out. Fixed long intervals alone cannot do this: three
+consecutive readings at 5 min is 15 min, and a tank fill can be over by then.
+
+### The "sender no longer reads as high" question — resolved (2026-09-08)
+
+Checked against the bench HA's recorder (192.168.1.170). There is **no drift** and the
+sender has not degraded; the apparent decline is the v1.1.0 settle-gate fix working.
+
+Evidence from `home-assistant_v2.db`:
+
+- **Current learned range is `learned_r_max = 167.130 Ω`, `learned_r_min = 4.494 Ω`** —
+  learned at 14:28–15:09 UTC on 2026-09-07, i.e. *after* the calibration reset at 14:24–14:26
+  (which cleared the artefact-inflated 300.03 Ω) and *after* the settle gate landed. So the
+  ~170 Ω top is the **most recent** genuine full-travel measurement on record, not an old one.
+- **Everything that ever read higher was the artefact.** The native sensor's hourly maximum
+  at 2026-09-07 11:00 UTC was **772.68 Ω** against a ~167 Ω sender — squarely inside the
+  232–772 Ω range documented for the pre-fix switch-on bug. Weekly BTHome daily maxima
+  (221.3 / 262.7 / 274.6 / 298.9 / 300.4 / 371.9 Ω) are all sender value + ~130 Ω;
+  e.g. 167.2 + 130 = 297.2 ✓, 91.4 + 130 = 221.4 ✓.
+- **After the fix (~14:00 UTC 2026-09-07) no reading has exceeded the true sender value:**
+  hourly maxima 167.54 → 116.83 → 91.88 → 91.90. The wild excursions stop dead at the fix.
+
+The "connection improved" hypothesis does not fit either: a degrading connection *adds*
+series resistance (readings go **up**), corroded joints do not spontaneously improve, and
+the change coincides exactly with a firmware flash rather than with any wiring event. The
+91.4 Ω and 116.8 Ω plateaus since then are float positions, not attempted maxima.
+
+**Only loose end:** there has been no full-travel sweep since 14:00 UTC on 2026-09-07. One
+sweep to the top confirming it still reaches ~167 Ω closes this completely.
+
+**Still a valid future mechanism:** `learned_r_max` never shrinks by design, so if the top
+*does* decline later through corrosion, the tank would read low when full — which is exactly
+what the planned fueling-mode calibration path exists to correct.
+
+### Recorder capability (bench HA, checked 2026-09-08)
+
+No `recorder:` block in `configuration.yaml` → defaults (`purge_keep_days: 10`,
+`commit_interval: 5`, everything recorded; DB 114 MB). **Sufficient, and no change needed:**
+
+- `sensor.kalitank_3e82_count` carries `state_class: measurement`, so HA keeps **hourly
+  long-term statistics forever** (confirmed: 153 hourly rows back to 2026-09-01).
+- BTHome quantises to 0.1 Ω, but with ~150–200 recorded changes/hour the reading dithers
+  across adjacent steps and the **hourly mean resolves to ~0.005 Ω** — e.g. the stable
+  91.4 Ω plateau reads 91.3577 → 91.4007 across 16:00–20:00.
+- **Caveat for any future drift hunt:** the diagnostic channels (`sender_voltage`,
+  `chain_current`, `shunt_voltage`) are ESPHome *native-API* entities and are `unavailable`
+  whenever the sleep firmware runs with Wi-Fi off. Since R = V / I, R alone cannot say
+  whether V, I or the shunt gain moved — run drift tests on the **bench firmware**.
+- **And test gain drift at high resistance, not shorted.** A multiplicative error scales with
+  the reading: 0.05 % is 0.046 Ω at 91.4 Ω (easily seen) but 0.002 Ω at 4.5 Ω — 50× below one
+  quantisation step. Shorting the sender only isolates *offset*/contact drift.
+
+### DC/DC module footprint (measured 2026-09-08)
+
+Module outline **18 × 12 mm**, four corner holes, pads solderable from the top; the
+14.5 mm variant additionally has half-castellations on the edges.
+
+| Variant | Hole pitch X | Hole pitch Y | Inset from 18 mm edge |
+|---------|-------------:|-------------:|----------------------:|
+| A (castellated edges) | 14.5 mm | 8.5 mm | 1.75 mm |
+| B | 15.0 mm | 8.5 mm | 1.50 mm |
+
+Both are accepted by **one set of four oblong SMD pads**, since only X differs and only
+by 0.5 mm:
+
+- Pad centres **Y = ±4.25 mm** (exact for both).
+- Pads elongated in X, spanning **X ≈ 6.25 → 10.0 mm** either side of centre
+  (~3.75 × 2.4 mm each). That covers hole centres at both ±7.25 and ±7.50 mm with
+  annulus margin, and runs ~1 mm past the module's ±9.0 mm edge so an iron can reach the
+  pad from the side as well as through the hole.
+- No copper pour under the module apart from these four pads — the module's underside
+  carries vias and silk, and only solder mask separates it from the carrier.
+- IN− and OUT− are expected to be one net (non-isolated buck); the two left-hand pads
+  therefore both land on GND. **Verify by continuity before layout is committed.**
+
+> **✅ Corner pinout — checked and resolved 2026-09-08.** Photographs of the two
+> variants side by side, both bottom face up (green `DSN-MINI-360` and black `EY9 3.3V`),
+> show **identical pad maps**, and the size difference is negligible. Both read, on the
+> bottom face:
+>
+> ```
+>   IN+  ......  OUT+
+>          -->
+>   IN-  ......  OUT-
+> ```
+>
+> So the **14.5/15.0 mm pitch separates IN from OUT**, and the **8.5 mm pitch separates
+> + from −**. One footprint serves both variants, and the earlier rev-2 MINI-360 is
+> pin-compatible with the 3.3 V part.
+>
+> **This check caught a real error in the first footprint**, which had grouped the pads
+> by polarity (+ on one side, − on the other) rather than by function. Built that way the
+> board would have applied 12 V backwards across the module's input *and* shorted OUT+ to
+> ground — exactly the failure the gate existed to prevent.
+>
+> **The corrected mapping.** The labelled face is the *bottom*: it must face down onto the
+> carrier because the inductor side has to face up. Seen from above it therefore mirrors
+> left↔right; rotating 180° in-plane to keep IN on the left gives the footprint as drawn:
+>
+> | Footprint corner (viewed from above) | Module pin |
+> |---|---|
+> | top-left | IN− |
+> | bottom-left | **IN+** |
+> | top-right | OUT− |
+> | bottom-right | **OUT+** |
+>
+> Silkscreen on the carrier reads `IN+ = LOWER LEFT` as a build-time reminder. Still worth
+> a 30-second continuity check that IN− and OUT− really are one net (non-isolated buck)
+> before the first power-up, since the footprint ties both to the ground plane.
+>
+> Evidence photographs:
+> [`../hardware/kali-tank-sensor-v3/doc/dcdc-variants-side-by-side.jpg`](../hardware/kali-tank-sensor-v3/doc/dcdc-variants-side-by-side.jpg)
+> and [`.../dcdc-variants-stacked.jpg`](../hardware/kali-tank-sensor-v3/doc/dcdc-variants-stacked.jpg).
+
+**Production should use the fixed 3.3 V variant.** The adjustable one depends on a cheap
+trimpot that cannot be reached once the board is potted and can drift with vibration and
+temperature — acceptable on the bench, not inside resin.
+
+### The board (2026-09-08) — [`hardware/kali-tank-sensor-v3/`](../hardware/kali-tank-sensor-v3/)
+
+KiCad 10 project, **DRC 0 errors / 0 unconnected, ERC 0 errors**. Gerbers, drill files,
+pick-and-place and BOM are generated; see `FABRICATION.md` there for the PCBWay order
+parameters and assembly order.
+
+**55 × 52 mm, four layers** (F.Cu signal / In1 solid GND / In2 3V3 / B.Cu signal).
+The first routed pass was 80 × 55 mm and only about 30 % populated: the 12 V chain and
+the buck formed one 54 mm row with the XIAO beside it instead of below it. Compacted
+2026-09-08 (rev 3.1). PCBWay prices both sizes in the same ≤ 100 × 100 mm tier, so the
+gain is purely mechanical — enclosure and potting volume.
+Four rather than two is a deliberate change: on two layers +3V3, NODE_A and the I2C
+pair form a topological knot that needs a via maze to resolve, and the plane pair
+removes the two largest nets (GND, 14 nodes; +3V3, 6 nodes) from the routing problem
+altogether. It also puts a solid ground plane directly under the INA238 and under the
+switching regulator, which is the right thing for a mixed-signal board. At qty 5 the
+extra fab cost is small next to the PCBA setup already being paid.
+
+Layout decisions that carried the routing:
+
+- **Buck in the top-right corner, XIAO directly under it.** The buck's right-hand
+  proud pads end at the board edge, the easiest possible iron access. The XIAO's top pad
+  row has 7 mm to the module body; its bottom row faces only C2/C3/SB1.
+- **XIAO rotated 270°** — USB-C flush on the right board edge (2.5 mm margin), signal
+  pins on two horizontal rows. Pads stand 1.1 mm proud of the module outline, so all 14
+  are iron-reachable and nothing routes under the module.
+- **Analog block next to the sender pads it serves.** Moved as a rigid group, so the
+  planar taps and the shared VS_INA bus are unchanged; NODE_A and NODE_B are ~20 mm
+  shorter than in the first pass. MEAS_EN runs on the top layer with no vias; SDA/SCL
+  hop to the bottom layer once each to cross the VS_INA bus.
+- **INA238 rotated 90°** — its top row reads VS, GND, VBUS, IN−, IN+ left to right,
+  matching the left-to-right order of the measurement chain placed above it. The
+  analog taps are therefore planar: no crossings and no vias in the sensitive path.
+- **I2C pull-ups sit on the VS_INA (GPIO10-switched) rail**, not on +3V3. On the
+  always-on rail they would forward-bias the INA238's input protection diodes while
+  it is unpowered in deep sleep.
+- Copper keepout under the XIAO (exposed thermal pad plus JTAG/battery pads
+  underneath, separated only by solder mask) and around the four non-plated
+  strain-relief holes.
+
+`gen_sch.py` and `gen_pcb.py` regenerate the schematic and board from source, so the
+design is reproducible rather than a binary blob.
+
+### Gates before the order goes in
+
+1. ~~Calipers on the #2835 module.~~ **Done 2026-09-08** — 14.5 and 15.0 mm corner pitch
+   in X, 8.5 mm in Y; one set of oblong pads takes both. See the footprint section below.
+2. **Real power numbers at the 12 V input** — *partially* addressed 2026-09-08. The duty
+   cycle is confirmed at **~30 %** (~4.5 s active per ~15 s cycle) and the design is
+   qualitatively low power, but the magnitudes still await a working meter: the 1 A
+   channel is broken and the 10 A range cannot resolve milliamps. Re-measure with a
+   series resistor read on the **voltage** range — method in the bench note below. Not a
+   blocker for ordering; it is a blocker for *claiming a number*.
+3. ~~Explain the reading drift.~~ **Resolved 2026-09-08 from HA's recorder — it was the
+   switch-on artefact, not drift.** See below. No electronics change is implied and the
+   PCB is unaffected.
+4. **Antenna-in-resin range test** on one unit before pouring five.
 
 ## Parts used
 
@@ -274,6 +474,88 @@ stability.
 antenna (see the XIAO note above). The unit now runs from 12 V through the MINI-360 at
 ~5 V; the quantitative power measurement (sleep vs. active, at the 12 V side) is still open.
 
+**Bench status (2026-09-08) — supply current on the 3.3 V side (⚠️ not usable as it stands):**
+Measured at the DC/DC converter's **3.3 V output**, bench DMM on its **10 A range** (the
+meter's 1 A range is broken):
+
+| State | Reading |
+|-------|--------:|
+| Awake, measurement window (chain on) | 1.11 mA |
+| Awake, before/after the measurement window | ~0.30 mA |
+| Deep sleep | 0.001 mA |
+
+These numbers are recorded for continuity, but **none of them can carry a design decision**:
+
+- **Wrong side of the converter.** The number this design needs is the draw at the
+  **12 V input**, which is dominated by the converter's own quiescent current — by
+  definition invisible from its 3.3 V output.
+- **Wrong range.** A 10 A range shunt is on the order of 10 mΩ; 1 mA across it is ~10 µV,
+  at or below the meter's noise floor. `0.001 mA` is not a measurement of anything —
+  Seeed's own figure for a sleeping ESP32-C3 is ~44 µA, 44× higher.
+- **The awake figure is physically implausible.** An ESP32-C3 awake draws ~20–25 mA with
+  the radio idle and peaks ~80 mA on BLE TX. 1.11 mA is roughly 20× too low.
+
+What survives: sleep draw is far below awake draw, and there is an intermediate (~0.3 mA
+indicated) awake-but-not-measuring state. Ratios only, no absolute values.
+
+**To get real numbers**, measure in the **12 V feed**:
+
+- *Sleep state:* 100 Ω in series (1 mA → 100 mV, easy on any DMM; the 0.1 V drop out of
+  12 V is harmless while asleep).
+- *Active window:* 1–10 Ω in series with a scope across it — this shows the BLE TX peaks
+  and the true duty-cycle shape, which a meter's average hides.
+- Or settle both in one shot with a µA-capable tool (Nordic PPK2 or equivalent).
+
+Two numbers are needed before a PCB revision can claim a power improvement: **converter
+quiescent at 12 V with the XIAO asleep**, and **average input current over a full
+wake + sleep cycle**.
+
+**Bench measurement (2026-09-08, second attempt) — 12 V input side, rev-2 bench build.**
+Now on the correct side of the converter, but still on the meter's **10 A range** (the
+1 A channel is still broken), so the magnitudes remain unusable. Observed cycle:
+
+| Phase | Reading | Duration |
+|-------|--------:|----------|
+| Measurement window | 0.640 mA | ~4.5 s |
+| Deep sleep | 0.096–0.1 mA | ~10 s |
+| Intermediate (≈5 s after sleep begins) | 0.230 mA | brief |
+
+**What is usable: the timing.** The cycle is ~15 s with roughly 4.5 s active — a **~30 %
+duty cycle**, matching the v1.1.0 firmware (2 s settle gate + measurement window, then
+~10 s sleep). That is measured from *when* the readings change, not from their size, so
+it stands regardless of the meter's accuracy. It confirms the duty cycle is the dominant
+energy term, ahead of both the converter's quiescent draw and the 5 V→3.3 V rail change.
+
+**What is not usable: the magnitudes.** For this rev-2 build (5 V rail, 150 Ω chain,
+breakout INA238) the expected figures at 12 V are ~0.3–1 mA asleep (the module's own
+datasheet claims "<1 mA" no-load) and ~20–25 mA in the active window. The readings are
+20–35× below that. A simple scale error was ruled out: it would preserve the ratio, but
+the measured active/sleep ratio is **6.7** where the hardware should give ~30. Both
+endpoints compressed toward each other is the signature of a reading dominated by offset
+and noise, which is what a 10 A range does when its few-milliohm shunt sees ~20 mA
+(well under 100 µV).
+
+**Conclusion that is safe to draw:** qualitatively the design *is* low power — there is
+no continuous high-current path, the meter never read high, and the duty cycle behaves as
+designed. From the component figures the estimated average is **≈7 mA at 12 V ≈ 60 Ah/yr**
+at the current ~15 s cycle, falling to **≈1 mA ≈ 9 Ah/yr** once the wake interval goes to
+minutes — at which point the converter's quiescent current becomes the whole budget. On a
+boat with any charging at all, both are small. **The exact figure remains unmeasured** and
+should not be quoted as fact until the meter is repaired.
+
+**Method for the re-measurement** (sidesteps the broken mA channel entirely — use the
+voltage ranges, which work): put a resistor in series with the 12 V feed and measure the
+voltage across it. 100 Ω for the sleep state (1 mA → 100 mV; the 0.1 V drop is harmless
+while asleep), 10 Ω for the active window (20 mA → 200 mV). A scope across the 10 Ω is
+better still — it shows the BLE bursts and the true duty-cycle shape instead of an average.
+
+> The meter's "USB sharing" is a **screenshot export**, not a data stream: it enumerates
+> as an Artery AT32 mass-storage device (serial 07C5C47A8991, 14.7 MB) mounted under a
+> volume name of 11 non-breaking spaces, containing only empty `LOGO/`,
+> `Screenshot file/` and `Screenshot simple file/` folders. There is no serial port and
+> no live logging — pressing the meter's save button drops a display image into
+> `Screenshot file/`, which can then be read off the mounted volume.
+
 1. ~~I2C level check~~ done: pull-ups sit at VIN → breakout VIN rewired to D10 (3.3 V).
 2. ~~VBus jumper~~ checked: ships open (VBus read 0 V) → **wire the VBus pad to node A**.
 3. **Power**: breakout LED on (fed from D10), 5 V at VUSB / screw VIN+.
@@ -286,14 +568,14 @@ antenna (see the XIAO note above). The unit now runs from 12 V through the MINI-
    ≤ ~5 Ω, VBus ≈ 0.1 V (validates Q1).
 8. **Power draw** at 12 V (once the MINI-360 stage is added) in active and sleep states.
 
-Expected values (5.0 V rail, R2 = 150 Ω, R_ds(on) ≈ 3 Ω, VBus at node A, R = V/I):
+Expected values (**rev 2** — 5.0 V rail, R2 = 150 Ω, R_ds(on) ≈ 3 Ω, VBus at node A, R = V/I):
 
 | Sender R | Chain current | VBus (node A) | Displayed R |
 |---------:|--------------:|--------------:|------------:|
-| 10 Ω (full) | ~30.7 mA | ~0.40 V | ~13 Ω |
+| 10 Ω (empty) | ~30.7 mA | ~0.40 V | ~13 Ω |
 | 47 Ω | ~25.0 mA | ~1.25 V | ~50 Ω |
 | 100 Ω | ~19.8 mA | ~2.04 V | ~103 Ω |
-| 180 Ω (empty) | ~15.0 mA | ~2.74 V | ~183 Ω |
+| 180 Ω (full) | ~15.0 mA | ~2.74 V | ~183 Ω |
 | open | ~0 mA | → ~5 V | invalid → fault |
 | short | ~32.7 mA | ~0.10 V | ~3 Ω (= R_ds) |
 
@@ -356,7 +638,7 @@ absorbed by calibration.
      HAOS BlueZ refuses `RegisterAdvertisement` (`org.bluez.Error.Failed`) even on the
      idle hci1, because HA's Bluetooth integration owns the adapters; `btmgmt` isn't
      shipped, and freeing the adapter would kill BTHome reception. The beacon node
-     doubles as an ESPHome Bluetooth proxy if HA needs better reception.
+     doubles as an ESPHome Bluetooth proxy if Kali's HA needs better reception.
 - **Phase 3 — helpers & install:** OTA-trigger transmitter (HA-host BLE if milestone 4
   proves it, else a second XIAO), optionally an ESPHome Bluetooth proxy, enclosure +
   potting (LED removed, correct-pinout FET verified), install on the fresh water tank.
@@ -367,5 +649,5 @@ absorbed by calibration.
 - BS170 specimen threshold check.
 - MINI-360 real-world quiescent current at 12 V.
 - Sampling time needed per cycle for a stable reading with sloshing.
-- Long sender wiring runs: may warrant 100 nF across the sender terminals / ESD
+- Sender wiring run on Kali: may warrant 100 nF across the sender terminals / ESD
   clamping at node A for the potted unit.

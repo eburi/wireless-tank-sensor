@@ -1,0 +1,4 @@
+(sym_lib_table
+  (version 7)
+  (lib (name "kali")(type "KiCad")(uri "${KIPRJMOD}/kali.kicad_sym")(options "")(descr "Kali tank sensor v3"))
+)
