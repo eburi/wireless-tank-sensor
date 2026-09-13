@@ -50,15 +50,15 @@ esp32_ble_tracker:
       - lambda: |-
           auto ib = x.get_ibeacon();
           if (!ib.has_value()) return;
-          ESP_LOGD("ota", "iBeacon %04X/%04X rssi %d", ib->get_major(), ib->get_minor(), x.get_rssi());
           // minor = 0x54<target>: this tank's own target, or 0 = every tank.
           const uint16_t minor = ib->get_minor();
           if (ib->get_major() == 0x4B4F && (minor == 0x5400 || minor == (0x5400 | ${ota_target}))) {
             // Only arm the flag while duty-cycling. Frames heard during an open
             // window must not queue a second window right after it (bench bug
             // 2026-09-05: every triggered window was followed by another one).
-            if (!id(maintenance_window).is_running()) {
-              ESP_LOGI("ota", "OTA trigger matched");
+            // The trigger repeats every ~100 ms: log the first match only.
+            if (!id(maintenance_window).is_running() && !id(ota_trigger_seen)) {
+              ESP_LOGI("ota", "OTA trigger matched (rssi %d)", x.get_rssi());
               id(ota_trigger_seen) = true;
             }
           }

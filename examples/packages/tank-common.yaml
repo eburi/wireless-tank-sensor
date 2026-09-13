@@ -17,6 +17,8 @@ esp32:
     type: esp-idf
 
 logger:
+  logs:
+    ina2xx: INFO   # the driver logs "Updating" / "Initiating new data collection" every second
 
 api:
   encryption:
