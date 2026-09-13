@@ -24,6 +24,7 @@ jobs:
           cat > examples/secrets.yaml <<'EOT'
           wifi_ssid: "ci"
           wifi_password: "ci-password"
+          wifi_ap_password: "ci-ap-password"
           ota_password: "ci-ota"
           api_encryption_key: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
           EOT
