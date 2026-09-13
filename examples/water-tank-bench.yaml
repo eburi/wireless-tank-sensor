@@ -15,6 +15,7 @@ wifi:
   # Fallback AP + captive portal (see packages/tank-common.yaml) if the Wi-Fi is not there.
   ap:
     ssid: "${device_name}"
+    password: !secret wifi_ap_password
     ap_timeout: 1min
 
 # Keep the measurement chain powered all the time on the bench.

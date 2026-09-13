@@ -32,6 +32,7 @@ wifi:
   # Fallback AP + captive portal if the Wi-Fi is not there.
   ap:
     ssid: "${device_name}"
+    password: !secret wifi_ap_password
     ap_timeout: 1min
 
 captive_portal:

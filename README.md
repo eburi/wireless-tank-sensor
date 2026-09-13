@@ -281,7 +281,8 @@ Two ways in:
 
 - **No Wi-Fi at all?** Every example carries a fallback **access point + captive portal**.
   If a node cannot join the configured Wi-Fi within a minute of switching the radio on, it
-  opens an open AP named after the device (`water-tank-1`, …). Join it, and the captive
+  opens a WPA2 access point named after the device (`water-tank-1`, …), protected by
+  `wifi_ap_password` from `secrets.yaml`. Join it, and the captive
   portal lets you enter new credentials or upload a firmware file — still no screwdriver.
 
 > **Why not transmit from the HA host's own Bluetooth?** Tried it. On Home Assistant OS
